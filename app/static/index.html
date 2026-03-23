@@ -1,0 +1,551 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>llms.txt Generator</title>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"></script>
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+      background: #f8f9fa;
+      color: #1a1a1a;
+      min-height: 100vh;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      padding: 2rem 1rem;
+    }
+
+    header {
+      text-align: center;
+      margin-bottom: 2rem;
+    }
+
+    header h1 { font-size: 2rem; font-weight: 700; }
+    header p { color: #666; margin-top: 0.4rem; font-size: 0.95rem; }
+
+    .card {
+      background: #fff;
+      border: 1px solid #e2e8f0;
+      border-radius: 12px;
+      padding: 2rem;
+      width: 100%;
+      max-width: 760px;
+      box-shadow: 0 1px 4px rgba(0,0,0,0.06);
+    }
+
+    /* Tabs */
+    .tabs { display: flex; gap: 0.5rem; margin-bottom: 1.5rem; border-bottom: 2px solid #e2e8f0; padding-bottom: 0; }
+    .tab-btn {
+      background: none; border: none; cursor: pointer;
+      padding: 0.5rem 1rem; font-size: 0.95rem; color: #666;
+      border-bottom: 2px solid transparent; margin-bottom: -2px;
+    }
+    .tab-btn.active { color: #2563eb; border-bottom-color: #2563eb; font-weight: 600; }
+
+    .tab-panel { display: none; }
+    .tab-panel.active { display: block; }
+
+    /* Form elements */
+    label { display: block; font-size: 0.875rem; font-weight: 500; margin-bottom: 0.4rem; color: #374151; }
+    input[type="url"], input[type="text"], textarea {
+      width: 100%; padding: 0.6rem 0.8rem; border: 1px solid #d1d5db;
+      border-radius: 8px; font-size: 0.95rem; outline: none;
+      transition: border-color 0.15s;
+    }
+    input[type="url"]:focus, input[type="text"]:focus, textarea:focus {
+      border-color: #2563eb; box-shadow: 0 0 0 3px rgba(37,99,235,0.1);
+    }
+    textarea { resize: vertical; min-height: 120px; font-family: monospace; font-size: 0.85rem; }
+
+    .slider-row { display: flex; align-items: center; gap: 0.75rem; margin-top: 0.75rem; }
+    input[type="range"] { flex: 1; accent-color: #2563eb; }
+    .slider-val { font-size: 0.875rem; color: #374151; min-width: 2.5rem; text-align: right; }
+
+    .field { margin-bottom: 1.2rem; }
+
+    .btn {
+      display: inline-flex; align-items: center; gap: 0.4rem;
+      padding: 0.6rem 1.4rem; border: none; border-radius: 8px;
+      cursor: pointer; font-size: 0.95rem; font-weight: 500;
+      transition: opacity 0.15s;
+    }
+    .btn:disabled { opacity: 0.5; cursor: not-allowed; }
+    .btn-primary { background: #2563eb; color: #fff; }
+    .btn-primary:not(:disabled):hover { background: #1d4ed8; }
+    .btn-secondary { background: #f1f5f9; color: #374151; border: 1px solid #d1d5db; }
+    .btn-secondary:not(:disabled):hover { background: #e2e8f0; }
+    .btn-danger { background: #fee2e2; color: #b91c1c; border: 1px solid #fca5a5; }
+    .btn-danger:not(:disabled):hover { background: #fecaca; }
+
+    .actions { display: flex; gap: 0.75rem; flex-wrap: wrap; margin-top: 0.75rem; }
+
+    /* Progress */
+    .progress-section { margin-top: 1.25rem; }
+    .progress-label { font-size: 0.875rem; color: #666; margin-bottom: 0.4rem; }
+    .progress-bar-wrap { background: #e2e8f0; border-radius: 999px; height: 8px; overflow: hidden; }
+    .progress-bar { background: #2563eb; height: 100%; border-radius: 999px; transition: width 0.3s; }
+    .progress-bar.indeterminate {
+      width: 40% !important;
+      animation: slide 1.4s ease-in-out infinite;
+    }
+    @keyframes slide {
+      0%   { transform: translateX(-100%); }
+      100% { transform: translateX(350%); }
+    }
+    .status-text { font-size: 0.875rem; margin-top: 0.4rem; color: #374151; }
+
+    /* Result */
+    .result-section { margin-top: 1.5rem; }
+    .result-section h3 { font-size: 1rem; font-weight: 600; margin-bottom: 0.75rem; }
+    pre {
+      background: #1e293b; color: #e2e8f0; padding: 1.25rem;
+      border-radius: 8px; overflow: auto; font-size: 0.8rem;
+      line-height: 1.6; max-height: 400px; white-space: pre-wrap;
+    }
+
+    /* Error */
+    .error-box {
+      background: #fef2f2; border: 1px solid #fca5a5; color: #b91c1c;
+      border-radius: 8px; padding: 0.75rem 1rem; margin-top: 1rem; font-size: 0.875rem;
+    }
+
+    /* File upload */
+    .upload-area {
+      border: 2px dashed #d1d5db; border-radius: 8px; padding: 1.5rem;
+      text-align: center; color: #9ca3af; font-size: 0.875rem;
+      cursor: pointer; transition: border-color 0.15s;
+    }
+    .upload-area:hover { border-color: #2563eb; color: #2563eb; }
+    .upload-area.drag-over { border-color: #2563eb; color: #2563eb; background: #eff6ff; }
+    input[type="file"] { display: none; }
+
+    /* Batch results */
+    .batch-results { margin-top: 1.25rem; }
+    details { border: 1px solid #e2e8f0; border-radius: 8px; margin-bottom: 0.5rem; overflow: hidden; }
+    summary {
+      padding: 0.75rem 1rem; cursor: pointer; font-size: 0.875rem;
+      display: flex; align-items: center; gap: 0.5rem; list-style: none;
+    }
+    summary::-webkit-details-marker { display: none; }
+    summary::before { content: "▶"; font-size: 0.7rem; color: #9ca3af; }
+    details[open] summary::before { content: "▼"; }
+    .batch-item-body { padding: 0.75rem 1rem; border-top: 1px solid #e2e8f0; }
+    .badge {
+      font-size: 0.75rem; padding: 0.15rem 0.5rem; border-radius: 999px; font-weight: 600;
+    }
+    .badge-done { background: #dcfce7; color: #15803d; }
+    .badge-error { background: #fee2e2; color: #b91c1c; }
+    .badge-running { background: #dbeafe; color: #1d4ed8; }
+    .badge-pending { background: #f1f5f9; color: #64748b; }
+
+    .skipped-list { margin-top: 0.5rem; font-size: 0.8rem; color: #9ca3af; }
+    .skipped-list li { margin-left: 1rem; }
+  </style>
+</head>
+<body>
+  <header>
+    <h1>llms.txt Generator</h1>
+    <p>Enter a website URL to generate a spec-compliant <code>llms.txt</code> file &nbsp;·&nbsp; <a href="/jobs.html" style="color:#2563eb;font-size:0.875rem">View jobs →</a></p>
+  </header>
+
+  <div class="card">
+    <div class="tabs">
+      <button class="tab-btn active" onclick="switchTab('single')">Single URL</button>
+      <button class="tab-btn" onclick="switchTab('batch')">Batch</button>
+    </div>
+
+    <!-- Single URL Tab -->
+    <div id="tab-single" class="tab-panel active">
+      <div class="field">
+        <label for="url-input">Website URL</label>
+        <input type="url" id="url-input" placeholder="https://example.com" autocomplete="off" />
+      </div>
+
+      <div class="field">
+        <label>Max Pages <span style="color:#9ca3af;font-weight:400">(how many pages to crawl)</span></label>
+        <div class="slider-row">
+          <input type="range" id="max-pages" min="1" max="200" value="50"
+            oninput="document.getElementById('max-pages-val').textContent = this.value" />
+          <span class="slider-val" id="max-pages-val">50</span>
+        </div>
+      </div>
+
+      <div class="actions">
+        <button class="btn btn-primary" id="generate-btn" onclick="startGenerate()">Generate</button>
+        <button class="btn btn-danger" id="cancel-btn" onclick="cancelJob()" style="display:none">Cancel</button>
+      </div>
+
+      <div class="progress-section" id="progress-section" style="display:none">
+        <div class="progress-label" id="progress-label">Starting...</div>
+        <div class="progress-bar-wrap">
+          <div class="progress-bar indeterminate" id="progress-bar"></div>
+        </div>
+      </div>
+
+      <div id="error-box" class="error-box" style="display:none"></div>
+
+      <div class="result-section" id="result-section" style="display:none">
+        <h3>Generated llms.txt</h3>
+        <pre id="result-pre"></pre>
+        <div class="actions">
+          <button class="btn btn-secondary" onclick="copyResult()">Copy</button>
+          <button class="btn btn-secondary" onclick="downloadResult()">Download llms.txt</button>
+        </div>
+        <div class="skipped-list" id="skipped-list" style="display:none">
+          <strong>Skipped pages:</strong>
+          <ul id="skipped-ul"></ul>
+        </div>
+      </div>
+    </div>
+
+    <!-- Batch Tab -->
+    <div id="tab-batch" class="tab-panel">
+      <div class="field">
+        <label>URLs (one per line or comma-separated)</label>
+        <textarea id="batch-urls" placeholder="https://example.com&#10;https://another-site.com"></textarea>
+      </div>
+
+      <div class="field">
+        <label>Or upload a .txt / .csv file</label>
+        <label class="upload-area" for="batch-file" id="upload-area"
+          ondragover="event.preventDefault(); this.classList.add('drag-over')"
+          ondragleave="this.classList.remove('drag-over')"
+          ondrop="event.preventDefault(); this.classList.remove('drag-over'); handleFileDrop(event.dataTransfer.files[0])">
+          <span id="upload-label">Click to choose file, or drag and drop</span>
+        </label>
+        <input type="file" id="batch-file" accept=".txt,.csv" onchange="onFileChosen(this)" />
+      </div>
+
+      <div class="field">
+        <label>Max Pages per Site</label>
+        <div class="slider-row">
+          <input type="range" id="batch-max-pages" min="1" max="200" value="50"
+            oninput="document.getElementById('batch-max-pages-val').textContent = this.value" />
+          <span class="slider-val" id="batch-max-pages-val">50</span>
+        </div>
+      </div>
+
+      <div class="actions">
+        <button class="btn btn-primary" id="batch-btn" onclick="startBatch()">Generate Batch</button>
+        <button class="btn btn-secondary" id="download-zip-btn" onclick="downloadZip()" style="display:none">Download All as ZIP</button>
+      </div>
+
+      <div class="progress-section" id="batch-progress" style="display:none">
+        <div class="progress-label" id="batch-progress-label">Starting...</div>
+        <div class="progress-bar-wrap">
+          <div class="progress-bar indeterminate" id="batch-progress-bar"></div>
+        </div>
+      </div>
+
+      <div id="batch-error" class="error-box" style="display:none"></div>
+      <div class="batch-results" id="batch-results"></div>
+    </div>
+  </div>
+
+  <script>
+    // --------------- Tab switching ---------------
+    function switchTab(name) {
+      document.querySelectorAll('.tab-btn').forEach((b, i) => {
+        b.classList.toggle('active', ['single','batch'][i] === name);
+      });
+      document.getElementById('tab-single').classList.toggle('active', name === 'single');
+      document.getElementById('tab-batch').classList.toggle('active', name === 'batch');
+    }
+
+    // --------------- Single URL ---------------
+    let currentJobId = null;
+    let pollInterval = null;
+    let resultContent = '';
+
+    async function startGenerate() {
+      const url = document.getElementById('url-input').value.trim();
+      if (!url) return alert('Please enter a URL.');
+
+      const maxPages = parseInt(document.getElementById('max-pages').value);
+
+      resetUI();
+      setGenerating(true);
+
+      try {
+        const res = await fetch('/api/jobs', {
+          method: 'POST',
+          headers: {'Content-Type': 'application/json'},
+          body: JSON.stringify({url, max_pages: maxPages}),
+        });
+        const data = await res.json();
+        if (!res.ok) throw new Error(data.detail || 'Submission failed');
+
+        currentJobId = data.job_id;
+        if (data.status === 'done') {
+          pollOnce(data.job_id);
+        } else {
+          pollInterval = setInterval(() => pollOnce(currentJobId), 1000);
+        }
+      } catch (err) {
+        showError(err.message);
+        setGenerating(false);
+      }
+    }
+
+    async function pollOnce(jobId) {
+      try {
+        const res = await fetch(`/api/jobs/${jobId}`);
+        const data = await res.json();
+        if (!res.ok) {
+          clearInterval(pollInterval);
+          showError(data.detail || 'Job not found');
+          setGenerating(false);
+          return;
+        }
+        updateProgress(data);
+        if (data.status === 'done') {
+          clearInterval(pollInterval);
+          showResult(data);
+          setGenerating(false);
+        } else if (['error', 'cancelled'].includes(data.status)) {
+          clearInterval(pollInterval);
+          showError(data.error || `Job ${data.status}`);
+          setGenerating(false);
+        }
+      } catch (err) {
+        clearInterval(pollInterval);
+        showError('Failed to poll job status.');
+        setGenerating(false);
+      }
+    }
+
+    function updateProgress(data) {
+      const section = document.getElementById('progress-section');
+      const bar = document.getElementById('progress-bar');
+      const label = document.getElementById('progress-label');
+      section.style.display = '';
+
+      const crawled = data.pages_crawled || 0;
+      const queued = data.queue_size || 0;
+      const pct = data.progress_pct;
+
+      if (pct !== null && pct !== undefined) {
+        bar.classList.remove('indeterminate');
+        bar.style.width = pct + '%';
+        label.textContent = `Crawled ${crawled} pages — ${Math.round(pct)}% complete`;
+      } else {
+        bar.classList.add('indeterminate');
+        bar.style.width = '40%';
+        label.textContent = `Crawled ${crawled} pages (${queued} queued)`;
+      }
+    }
+
+    function showResult(data) {
+      resultContent = data.llms_txt || '';
+      document.getElementById('result-pre').textContent = resultContent;
+      document.getElementById('result-section').style.display = '';
+      document.getElementById('progress-section').style.display = 'none';
+
+      // Show skipped pages
+      const skipped = data.skipped_urls || [];
+      if (skipped.length) {
+        const ul = document.getElementById('skipped-ul');
+        ul.innerHTML = skipped.map(s => `<li>${s.url} — ${s.reason}</li>`).join('');
+        document.getElementById('skipped-list').style.display = '';
+      }
+    }
+
+    function showError(msg) {
+      const box = document.getElementById('error-box');
+      box.textContent = msg;
+      box.style.display = '';
+    }
+
+    function setGenerating(on) {
+      document.getElementById('generate-btn').disabled = on;
+      document.getElementById('cancel-btn').style.display = on ? '' : 'none';
+    }
+
+    function resetUI() {
+      clearInterval(pollInterval);
+      document.getElementById('result-section').style.display = 'none';
+      document.getElementById('error-box').style.display = 'none';
+      document.getElementById('progress-section').style.display = 'none';
+      document.getElementById('skipped-list').style.display = 'none';
+      document.getElementById('skipped-ul').innerHTML = '';
+      resultContent = '';
+    }
+
+    async function cancelJob() {
+      if (!currentJobId) return;
+      clearInterval(pollInterval);
+      await fetch(`/api/jobs/${currentJobId}`, {method: 'DELETE'}).catch(() => {});
+      setGenerating(false);
+      showError('Job cancelled.');
+    }
+
+    function copyResult() {
+      navigator.clipboard.writeText(resultContent).then(() => alert('Copied!'));
+    }
+
+    function downloadResult() {
+      const blob = new Blob([resultContent], {type: 'text/plain'});
+      const a = document.createElement('a');
+      a.href = URL.createObjectURL(blob);
+      a.download = 'llms.txt';
+      a.click();
+    }
+
+    // --------------- Batch ---------------
+    let batchJobId = null;
+    let batchInterval = null;
+    let batchResults = [];
+
+    function onFileChosen(input) {
+      const name = input.files[0]?.name || 'Choose file';
+      document.getElementById('upload-label').textContent = name;
+    }
+
+    function handleFileDrop(file) {
+      if (!file) return;
+      // Assign the dropped file to the hidden input via DataTransfer
+      const dt = new DataTransfer();
+      dt.items.add(file);
+      const input = document.getElementById('batch-file');
+      input.files = dt.files;
+      document.getElementById('upload-label').textContent = file.name;
+    }
+
+    async function startBatch() {
+      const urlsText = document.getElementById('batch-urls').value.trim();
+      const fileInput = document.getElementById('batch-file');
+      const maxPages = document.getElementById('batch-max-pages').value;
+
+      if (!urlsText && (!fileInput.files || !fileInput.files.length)) {
+        return alert('Please enter URLs or upload a file.');
+      }
+
+      resetBatchUI();
+      document.getElementById('batch-btn').disabled = true;
+      document.getElementById('batch-progress').style.display = '';
+
+      const form = new FormData();
+      form.append('urls_text', urlsText);
+      form.append('max_pages', maxPages);
+      if (fileInput.files && fileInput.files[0]) {
+        form.append('file', fileInput.files[0]);
+      }
+
+      try {
+        const res = await fetch('/api/jobs/batch', {method: 'POST', body: form});
+        const data = await res.json();
+        if (!res.ok) throw new Error(data.detail || 'Submission failed');
+
+        batchJobId = data.job_id;
+        const total = data.url_count;
+        document.getElementById('batch-progress-label').textContent =
+          `Processing ${total} site${total === 1 ? '' : 's'}...`;
+
+        batchInterval = setInterval(() => pollBatch(batchJobId), 2000);
+      } catch (err) {
+        document.getElementById('batch-error').textContent = err.message;
+        document.getElementById('batch-error').style.display = '';
+        document.getElementById('batch-btn').disabled = false;
+      }
+    }
+
+    async function pollBatch(jobId) {
+      try {
+        const [statusRes, resultsRes] = await Promise.all([
+          fetch(`/api/jobs/${jobId}`),
+          fetch(`/api/jobs/${jobId}/results`),
+        ]);
+        const status = await statusRes.json();
+        const results = resultsRes.ok ? await resultsRes.json() : null;
+
+        if (results) {
+          renderBatchResults(results.results || []);
+          batchResults = results.results || [];
+          const done = (results.results || []).length;
+          const total = results.url_count || '?';
+          document.getElementById('batch-progress-label').textContent =
+            `Processed ${done} of ${total} sites...`;
+        }
+
+        if (['done', 'error', 'cancelled'].includes(status.status)) {
+          clearInterval(batchInterval);
+          document.getElementById('batch-progress').style.display = 'none';
+          document.getElementById('batch-btn').disabled = false;
+          if (batchResults.length > 0) {
+            document.getElementById('download-zip-btn').style.display = '';
+          }
+        }
+      } catch {
+        clearInterval(batchInterval);
+        document.getElementById('batch-btn').disabled = false;
+      }
+    }
+
+    function renderBatchResults(results) {
+      const container = document.getElementById('batch-results');
+      container.innerHTML = results.map(r => {
+        const badgeClass = r.status === 'done' ? 'badge-done' : r.error ? 'badge-error' : 'badge-running';
+        const body = r.status === 'done'
+          ? `<div class="batch-item-body"><pre style="max-height:200px">${escHtml(r.llms_txt || '')}</pre>
+             <div class="actions" style="margin-top:0.5rem">
+               <button class="btn btn-secondary" onclick="downloadSingle('${escAttr(r.url)}', \`${escJs(r.llms_txt || '')}\`)">Download</button>
+             </div></div>`
+          : r.error
+            ? `<div class="batch-item-body" style="color:#b91c1c;font-size:0.85rem">${escHtml(r.error)}</div>`
+            : `<div class="batch-item-body" style="color:#666;font-size:0.85rem">Processing...</div>`;
+        return `<details>
+          <summary>
+            <span class="badge ${badgeClass}">${r.status}</span>
+            ${escHtml(r.url)}
+            ${r.page_count != null ? `<span style="margin-left:auto;color:#9ca3af;font-size:0.8rem">${r.page_count} pages</span>` : ''}
+          </summary>
+          ${body}
+        </details>`;
+      }).join('');
+    }
+
+    function downloadSingle(url, content) {
+      const hostname = new URL(url).hostname;
+      const blob = new Blob([content], {type: 'text/plain'});
+      const a = document.createElement('a');
+      a.href = URL.createObjectURL(blob);
+      a.download = `${hostname}-llms.txt`;
+      a.click();
+    }
+
+    async function downloadZip() {
+      const zip = new JSZip();
+      for (const r of batchResults) {
+        if (r.llms_txt) {
+          const hostname = new URL(r.url).hostname;
+          zip.file(`${hostname}-llms.txt`, r.llms_txt);
+        }
+      }
+      const blob = await zip.generateAsync({type: 'blob'});
+      const a = document.createElement('a');
+      a.href = URL.createObjectURL(blob);
+      a.download = 'llms-txt-batch.zip';
+      a.click();
+    }
+
+    function resetBatchUI() {
+      clearInterval(batchInterval);
+      batchResults = [];
+      document.getElementById('batch-results').innerHTML = '';
+      document.getElementById('batch-error').style.display = 'none';
+      document.getElementById('download-zip-btn').style.display = 'none';
+    }
+
+    // Helpers
+    function escHtml(s) {
+      return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+    }
+    function escAttr(s) { return String(s).replace(/"/g, '&quot;'); }
+    function escJs(s) { return String(s).replace(/\\/g,'\\\\').replace(/`/g,'\\`').replace(/\$/g,'\\$'); }
+  </script>
+</body>
+</html>

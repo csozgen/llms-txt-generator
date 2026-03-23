@@ -1,0 +1,20 @@
+server:
+  host: "0.0.0.0"
+  port: 8000
+
+crawler:
+  worker_count: 10
+  request_timeout: 10.0       # seconds per request
+  crawl_delay: 10.0            # polite delay between requests per worker
+  max_connections: 50         # global asyncio.Semaphore cap
+  default_max_pages: 50
+  default_max_depth: 3
+  max_pages_limit: 200        # hard ceiling for user-supplied max_pages
+
+retry:
+  max_retries: 2
+  backoff_base: 1.0           # seconds; doubles each retry
+  retry_after_default: 5.0   # seconds to wait on 429 without Retry-After header
+
+cache:
+  ttl_seconds: 3600           # how long to reuse a completed crawl result

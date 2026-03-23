@@ -1,0 +1,524 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Jobs — llms.txt Generator</title>
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+      background: #f8f9fa;
+      color: #1a1a1a;
+      min-height: 100vh;
+      padding: 2rem 1rem;
+    }
+
+    .container { max-width: 1000px; margin: 0 auto; }
+
+    header {
+      display: flex; align-items: baseline; justify-content: space-between;
+      margin-bottom: 1.5rem; flex-wrap: wrap; gap: 0.5rem;
+    }
+    header h1 { font-size: 1.5rem; font-weight: 700; }
+    header nav { display: flex; gap: 1rem; align-items: center; font-size: 0.875rem; }
+    header nav a { color: #2563eb; text-decoration: none; }
+    header nav a:hover { text-decoration: underline; }
+
+    /* Metrics bar */
+    .metrics-bar {
+      display: flex; gap: 1rem; flex-wrap: wrap; margin-bottom: 1.5rem;
+    }
+    .metric-card {
+      background: #fff; border: 1px solid #e2e8f0; border-radius: 10px;
+      padding: 0.75rem 1.25rem; flex: 1; min-width: 120px;
+    }
+    .metric-card .label { font-size: 0.75rem; color: #9ca3af; text-transform: uppercase; letter-spacing: 0.05em; }
+    .metric-card .value { font-size: 1.5rem; font-weight: 700; margin-top: 0.15rem; }
+
+    /* Controls */
+    .controls {
+      display: flex; gap: 0.75rem; align-items: center; margin-bottom: 1rem; flex-wrap: wrap;
+    }
+    .btn {
+      display: inline-flex; align-items: center; gap: 0.35rem;
+      padding: 0.45rem 1rem; border: none; border-radius: 7px;
+      cursor: pointer; font-size: 0.875rem; font-weight: 500;
+    }
+    .btn-primary { background: #2563eb; color: #fff; }
+    .btn-primary:hover { background: #1d4ed8; }
+    .btn-secondary { background: #f1f5f9; color: #374151; border: 1px solid #d1d5db; }
+    .btn-secondary:hover { background: #e2e8f0; }
+    .btn-danger { background: #fee2e2; color: #b91c1c; border: 1px solid #fca5a5; }
+    .btn-danger:hover { background: #fecaca; }
+    .btn-sm { padding: 0.3rem 0.65rem; font-size: 0.8rem; }
+
+    .filter-select {
+      padding: 0.4rem 0.75rem; border: 1px solid #d1d5db; border-radius: 7px;
+      font-size: 0.875rem; background: #fff; cursor: pointer; outline: none;
+    }
+    .auto-refresh-label { font-size: 0.8rem; color: #6b7280; display: flex; align-items: center; gap: 0.35rem; }
+
+    /* Table */
+    .table-wrap {
+      background: #fff; border: 1px solid #e2e8f0; border-radius: 10px; overflow: hidden;
+    }
+    table { width: 100%; border-collapse: collapse; font-size: 0.875rem; }
+    th {
+      background: #f8f9fa; padding: 0.65rem 1rem; text-align: left;
+      font-weight: 600; color: #374151; font-size: 0.8rem;
+      border-bottom: 1px solid #e2e8f0; white-space: nowrap;
+    }
+    td { padding: 0.75rem 1rem; border-bottom: 1px solid #f1f5f9; vertical-align: middle; }
+    tr:last-child td { border-bottom: none; }
+    tr.clickable { cursor: pointer; }
+    tr.clickable:hover td { background: #f8faff; }
+    tr.selected td { background: #eff6ff; }
+
+    .url-cell { max-width: 260px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+    .job-id-cell { font-family: monospace; font-size: 0.75rem; color: #9ca3af; }
+
+    .badge {
+      display: inline-block; font-size: 0.7rem; padding: 0.2rem 0.55rem;
+      border-radius: 999px; font-weight: 600; white-space: nowrap;
+    }
+    .badge-done     { background: #dcfce7; color: #15803d; }
+    .badge-error    { background: #fee2e2; color: #b91c1c; }
+    .badge-running  { background: #dbeafe; color: #1d4ed8; }
+    .badge-pending  { background: #f1f5f9; color: #64748b; }
+    .badge-cancelled{ background: #fef9c3; color: #854d0e; }
+    .badge-batch    { background: #f3e8ff; color: #7c3aed; font-size: 0.65rem; margin-left: 0.3rem; }
+
+    .progress-mini {
+      width: 80px; height: 6px; background: #e2e8f0; border-radius: 999px; overflow: hidden; display: inline-block;
+    }
+    .progress-mini-fill { height: 100%; background: #2563eb; border-radius: 999px; transition: width 0.4s; }
+    .progress-mini-fill.indeterminate {
+      width: 40% !important; animation: slide 1.4s ease-in-out infinite;
+    }
+    @keyframes slide {
+      0%   { transform: translateX(-100%); }
+      100% { transform: translateX(350%); }
+    }
+
+    .empty-state {
+      text-align: center; padding: 3rem; color: #9ca3af; font-size: 0.9rem;
+    }
+
+    /* Detail panel */
+    #detail-panel {
+      background: #fff; border: 1px solid #e2e8f0; border-radius: 10px;
+      margin-top: 1.5rem; overflow: hidden;
+    }
+    .detail-header {
+      display: flex; align-items: center; justify-content: space-between;
+      padding: 1rem 1.25rem; border-bottom: 1px solid #e2e8f0; flex-wrap: wrap; gap: 0.5rem;
+    }
+    .detail-header h2 { font-size: 1rem; font-weight: 600; }
+    .detail-grid {
+      display: grid; grid-template-columns: repeat(auto-fill, minmax(160px, 1fr));
+      gap: 1rem; padding: 1.25rem;
+    }
+    .detail-stat .label { font-size: 0.75rem; color: #9ca3af; }
+    .detail-stat .value { font-size: 1rem; font-weight: 600; margin-top: 0.1rem; }
+    .detail-section { padding: 0 1.25rem 1.25rem; }
+    .detail-section h3 { font-size: 0.875rem; font-weight: 600; margin-bottom: 0.5rem; color: #374151; }
+    pre {
+      background: #1e293b; color: #e2e8f0; padding: 1rem; border-radius: 8px;
+      font-size: 0.78rem; line-height: 1.6; overflow: auto; max-height: 320px;
+      white-space: pre-wrap;
+    }
+    #d-batch-table { border: 1px solid #e2e8f0; border-radius: 8px; overflow: hidden; }
+    .skipped-list { font-size: 0.8rem; color: #6b7280; }
+    .skipped-list li { margin: 0.25rem 0 0.25rem 1.25rem; }
+    .error-box {
+      background: #fef2f2; border: 1px solid #fca5a5; color: #b91c1c;
+      border-radius: 8px; padding: 0.65rem 0.9rem; font-size: 0.85rem;
+    }
+    .detail-actions { display: flex; gap: 0.5rem; flex-wrap: wrap; }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <header>
+      <h1>Jobs</h1>
+      <nav>
+        <a href="/">← Generator</a>
+        <a href="/api/metrics" target="_blank">Metrics JSON</a>
+      </nav>
+    </header>
+
+    <!-- Metrics bar -->
+    <div class="metrics-bar" id="metrics-bar">
+      <div class="metric-card"><div class="label">Total</div><div class="value" id="m-total">—</div></div>
+      <div class="metric-card"><div class="label">Active</div><div class="value" id="m-active">—</div></div>
+      <div class="metric-card"><div class="label">Done</div><div class="value" id="m-done">—</div></div>
+      <div class="metric-card"><div class="label">Failed</div><div class="value" id="m-failed">—</div></div>
+      <div class="metric-card"><div class="label">Pages crawled</div><div class="value" id="m-pages">—</div></div>
+      <div class="metric-card"><div class="label">Pages skipped</div><div class="value" id="m-skipped">—</div></div>
+    </div>
+
+    <!-- Controls -->
+    <div class="controls">
+      <select class="filter-select" id="status-filter" onchange="applyFilter()">
+        <option value="">All statuses</option>
+        <option value="running">Running</option>
+        <option value="pending">Pending</option>
+        <option value="done">Done</option>
+        <option value="error">Error</option>
+        <option value="cancelled">Cancelled</option>
+      </select>
+      <button class="btn btn-secondary" onclick="loadAll()">Refresh</button>
+      <label class="auto-refresh-label">
+        <input type="checkbox" id="auto-refresh" checked onchange="toggleAutoRefresh()" />
+        Auto-refresh (3s)
+      </label>
+    </div>
+
+    <!-- Jobs table -->
+    <div class="table-wrap">
+      <table>
+        <thead>
+          <tr>
+            <th>Status</th>
+            <th>URL</th>
+            <th>Progress</th>
+            <th>Pages</th>
+            <th>Duration</th>
+            <th>Submitted</th>
+            <th></th>
+          </tr>
+        </thead>
+        <tbody id="jobs-tbody">
+          <tr><td colspan="7" class="empty-state">Loading...</td></tr>
+        </tbody>
+      </table>
+    </div>
+
+    <!-- Detail panel -->
+    <div id="detail-panel" style="display:none">
+      <div class="detail-header">
+        <div>
+          <h2 id="d-url">—</h2>
+          <div style="font-size:0.75rem;color:#9ca3af;margin-top:0.2rem" id="d-job-id"></div>
+        </div>
+        <div class="detail-actions">
+          <button class="btn btn-secondary btn-sm" onclick="copyLlmsTxt()" id="d-copy-btn" style="display:none">Copy llms.txt</button>
+          <button class="btn btn-secondary btn-sm" onclick="downloadLlmsTxt()" id="d-download-btn" style="display:none">Download</button>
+          <button class="btn btn-danger btn-sm" onclick="cancelSelectedJob()" id="d-cancel-btn" style="display:none">Cancel</button>
+          <button class="btn btn-secondary btn-sm" onclick="closeDetail()">Close ✕</button>
+        </div>
+      </div>
+      <div class="detail-grid" id="detail-grid">
+        <div class="detail-stat"><div class="label">Status</div><div class="value" id="d-status">—</div></div>
+        <div class="detail-stat"><div class="label">Pages crawled</div><div class="value" id="d-pages">—</div></div>
+        <div class="detail-stat"><div class="label">Pages skipped</div><div class="value" id="d-skipped">—</div></div>
+        <div class="detail-stat"><div class="label">Queue size</div><div class="value" id="d-queue">—</div></div>
+        <div class="detail-stat"><div class="label">Progress</div><div class="value" id="d-pct">—</div></div>
+        <div class="detail-stat"><div class="label">Duration</div><div class="value" id="d-duration">—</div></div>
+        <div class="detail-stat"><div class="label">Seeding</div><div class="value" id="d-seed">—</div></div>
+        <div class="detail-stat"><div class="label">Max pages</div><div class="value" id="d-maxpages">—</div></div>
+      </div>
+      <div class="detail-section" id="d-error-section" style="display:none">
+        <div class="error-box" id="d-error"></div>
+      </div>
+      <div class="detail-section" id="d-llms-section" style="display:none">
+        <h3>Generated llms.txt</h3>
+        <pre id="d-llms-pre"></pre>
+      </div>
+      <div class="detail-section" id="d-skipped-section" style="display:none">
+        <h3>Skipped pages</h3>
+        <ul class="skipped-list" id="d-skipped-ul"></ul>
+      </div>
+      <div class="detail-section" id="d-batch-section" style="display:none">
+        <h3>Batch results</h3>
+        <table id="d-batch-table">
+          <thead>
+            <tr><th>URL</th><th>Status</th><th>Pages</th><th>Actions</th></tr>
+          </thead>
+          <tbody id="d-batch-tbody"></tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    let allJobs = [];
+    let selectedJobId = null;
+    let selectedJobData = null;
+    let autoRefreshTimer = null;
+    let batchResultsCache = []; // indexed by row position for safe onclick refs
+
+    // --------------- Load & render jobs ---------------
+    async function loadAll() {
+      await Promise.all([loadJobs(), loadMetrics()]);
+    }
+
+    async function loadJobs() {
+      try {
+        const res = await fetch('/api/jobs');
+        const data = await res.json();
+        allJobs = data.jobs || [];
+        renderTable();
+        if (selectedJobId) await loadDetail(selectedJobId, false);
+      } catch { /* ignore */ }
+    }
+
+    async function loadMetrics() {
+      try {
+        const res = await fetch('/api/metrics');
+        const d = await res.json();
+        document.getElementById('m-total').textContent = d.total_jobs;
+        document.getElementById('m-active').textContent = d.active_jobs;
+        document.getElementById('m-done').textContent = d.completed_jobs;
+        document.getElementById('m-failed').textContent = d.failed_jobs;
+        document.getElementById('m-pages').textContent = d.total_pages_crawled;
+        document.getElementById('m-skipped').textContent = d.total_pages_skipped;
+      } catch { /* ignore */ }
+    }
+
+    function applyFilter() { renderTable(); }
+
+    function renderTable() {
+      const filter = document.getElementById('status-filter').value;
+      const jobs = filter ? allJobs.filter(j => j.status === filter) : allJobs;
+      const tbody = document.getElementById('jobs-tbody');
+
+      if (!jobs.length) {
+        tbody.innerHTML = `<tr><td colspan="7" class="empty-state">${filter ? 'No jobs with status "' + filter + '"' : 'No jobs yet. Submit a URL on the generator page.'}</td></tr>`;
+        return;
+      }
+
+      tbody.innerHTML = jobs.map(j => {
+        const isSelected = j.job_id === selectedJobId;
+        const pct = j.progress_pct;
+        const progressHtml = j.status === 'running'
+          ? `<div class="progress-mini"><div class="progress-mini-fill ${pct === null ? 'indeterminate' : ''}" style="width:${pct ?? 40}%"></div></div>`
+          : (j.status === 'done' ? '<span style="color:#15803d;font-size:0.8rem">✓</span>' : '—');
+
+        const dur = j.duration_seconds != null
+          ? formatDuration(j.duration_seconds)
+          : (j.elapsed_seconds != null && j.status === 'running' ? formatDuration(j.elapsed_seconds) + '…' : '—');
+
+        const submitted = new Date(j.submitted_at).toLocaleTimeString();
+        const batchBadge = j.is_batch ? '<span class="badge badge-batch">batch</span>' : '';
+
+        return `<tr class="clickable ${isSelected ? 'selected' : ''}" onclick="selectJob('${j.job_id}')">
+          <td><span class="badge badge-${j.status}">${j.status}</span>${batchBadge}</td>
+          <td class="url-cell" title="${escHtml(j.url)}">${j.is_batch ? `<em>Batch (${j.batch_url_count} sites)</em>` : escHtml(j.url)}</td>
+          <td>${progressHtml}</td>
+          <td>${j.pages_crawled}${j.pages_skipped ? ' <span style="color:#9ca3af">(' + j.pages_skipped + ' skip)</span>' : ''}</td>
+          <td>${dur}</td>
+          <td style="color:#9ca3af">${submitted}</td>
+          <td><button class="btn btn-secondary btn-sm" onclick="event.stopPropagation(); selectJob('${j.job_id}')">Details</button></td>
+        </tr>`;
+      }).join('');
+    }
+
+    // --------------- Job detail ---------------
+    async function selectJob(jobId) {
+      selectedJobId = jobId;
+      renderTable(); // update selection highlight
+      await loadDetail(jobId, true);
+    }
+
+    async function loadDetail(jobId, scroll) {
+      try {
+        const res = await fetch(`/api/jobs/${jobId}`);
+        if (!res.ok) return;
+        const d = await res.json();
+
+        // For batch jobs, also load per-URL results
+        const listJob = allJobs.find(j => j.job_id === jobId);
+        if (listJob?.is_batch) {
+          const bres = await fetch(`/api/jobs/${jobId}/results`);
+          d._batchResults = bres.ok ? (await bres.json()).results : [];
+          d._isBatch = true;
+          d._batchUrlCount = listJob.batch_url_count;
+        }
+
+        selectedJobData = d;
+        renderDetail(d);
+        if (scroll) {
+          document.getElementById('detail-panel').scrollIntoView({behavior: 'smooth', block: 'start'});
+        }
+      } catch { /* ignore */ }
+    }
+
+    function renderDetail(d) {
+      const panel = document.getElementById('detail-panel');
+      panel.style.display = '';
+
+      document.getElementById('d-job-id').textContent = 'Job ID: ' + d.job_id;
+      document.getElementById('d-status').innerHTML = `<span class="badge badge-${d.status}">${d.status}</span>`;
+      document.getElementById('d-cancel-btn').style.display =
+        ['pending', 'running'].includes(d.status) ? '' : 'none';
+
+      if (d._isBatch) {
+        renderBatchDetail(d);
+      } else {
+        renderSingleDetail(d);
+      }
+    }
+
+    function renderSingleDetail(d) {
+      document.getElementById('d-url').textContent = d.url;
+      document.getElementById('d-pages').textContent = d.pages_crawled ?? '—';
+      document.getElementById('d-skipped').textContent = d.pages_skipped ?? '—';
+      document.getElementById('d-queue').textContent = d.queue_size ?? '—';
+      document.getElementById('d-pct').textContent = d.progress_pct != null ? Math.round(d.progress_pct) + '%' : '—';
+      document.getElementById('d-duration').textContent = d.duration_seconds != null
+        ? formatDuration(d.duration_seconds)
+        : (d.elapsed_seconds != null ? formatDuration(d.elapsed_seconds) + '…' : '—');
+      document.getElementById('d-seed').textContent = d.sitemap_seeded ? 'Sitemap' : 'BFS';
+      document.getElementById('d-maxpages').textContent = d.max_pages ?? '—';
+
+      document.getElementById('d-batch-section').style.display = 'none';
+      document.getElementById('detail-grid').style.display = '';
+
+      // Error
+      const errSection = document.getElementById('d-error-section');
+      if (d.error) {
+        document.getElementById('d-error').textContent = d.error;
+        errSection.style.display = '';
+      } else {
+        errSection.style.display = 'none';
+      }
+
+      // llms.txt
+      const llmsSection = document.getElementById('d-llms-section');
+      if (d.llms_txt) {
+        document.getElementById('d-llms-pre').textContent = d.llms_txt;
+        llmsSection.style.display = '';
+        document.getElementById('d-copy-btn').style.display = '';
+        document.getElementById('d-download-btn').style.display = '';
+      } else {
+        llmsSection.style.display = 'none';
+        document.getElementById('d-copy-btn').style.display = 'none';
+        document.getElementById('d-download-btn').style.display = 'none';
+      }
+
+      // Skipped URLs
+      const skippedSection = document.getElementById('d-skipped-section');
+      const skipped = d.skipped_urls || [];
+      if (skipped.length) {
+        document.getElementById('d-skipped-ul').innerHTML =
+          skipped.map(s => `<li><code>${escHtml(s.url)}</code> — ${escHtml(s.reason)}</li>`).join('');
+        skippedSection.style.display = '';
+      } else {
+        skippedSection.style.display = 'none';
+      }
+    }
+
+    function renderBatchDetail(d) {
+      const results = d._batchResults || [];
+      const completed = results.filter(r => r.status === 'done').length;
+      document.getElementById('d-url').textContent = `Batch — ${d._batchUrlCount} sites (${completed} done)`;
+
+      // Hide single-job stat grid and single-job sections
+      document.getElementById('detail-grid').style.display = 'none';
+      document.getElementById('d-error-section').style.display = 'none';
+      document.getElementById('d-llms-section').style.display = 'none';
+      document.getElementById('d-skipped-section').style.display = 'none';
+      document.getElementById('d-copy-btn').style.display = 'none';
+      document.getElementById('d-download-btn').style.display = 'none';
+
+      // Duration summary in subtitle area
+      const dur = d.duration_seconds != null
+        ? formatDuration(d.duration_seconds)
+        : (d.elapsed_seconds != null ? formatDuration(d.elapsed_seconds) + '…' : null);
+      const extra = [
+        d.pages_crawled ? `${d.pages_crawled} pages crawled` : null,
+        dur ? `${dur}` : null,
+      ].filter(Boolean).join(' · ');
+      document.getElementById('d-job-id').textContent = `Job ID: ${d.job_id}${extra ? '  ·  ' + extra : ''}`;
+
+      // Batch results table
+      const batchSection = document.getElementById('d-batch-section');
+      batchSection.style.display = '';
+
+      if (!results.length) {
+        document.getElementById('d-batch-tbody').innerHTML =
+          '<tr><td colspan="4" class="empty-state">No results yet…</td></tr>';
+        return;
+      }
+
+      batchResultsCache = results;
+      document.getElementById('d-batch-tbody').innerHTML = results.map((r, i) => {
+        const badge = `<span class="badge badge-${r.status}">${r.status}</span>`;
+        const pages = r.page_count ?? '—';
+        const actions = r.status === 'done' && r.llms_txt
+          ? `<button class="btn btn-secondary btn-sm" onclick="downloadBatchItem(${i})">Download</button>`
+          : '';
+        return `<tr>
+          <td class="url-cell" title="${escHtml(r.url)}">${escHtml(r.url)}</td>
+          <td>${badge}</td>
+          <td>${pages}</td>
+          <td>${actions}${r.error ? `<span style="color:#b91c1c;font-size:0.8rem">${escHtml(r.error)}</span>` : ''}</td>
+        </tr>`;
+      }).join('');
+    }
+
+    function downloadBatchItem(i) {
+      const r = batchResultsCache[i];
+      if (!r?.llms_txt) return;
+      const hostname = new URL(r.url).hostname;
+      const blob = new Blob([r.llms_txt], {type: 'text/plain'});
+      const a = document.createElement('a');
+      a.href = URL.createObjectURL(blob);
+      a.download = `${hostname}-llms.txt`;
+      a.click();
+    }
+
+    function closeDetail() {
+      selectedJobId = null;
+      selectedJobData = null;
+      document.getElementById('detail-panel').style.display = 'none';
+      renderTable();
+    }
+
+    async function cancelSelectedJob() {
+      if (!selectedJobId) return;
+      await fetch(`/api/jobs/${selectedJobId}`, {method: 'DELETE'});
+      await loadDetail(selectedJobId, false);
+      await loadJobs();
+    }
+
+    function copyLlmsTxt() {
+      if (selectedJobData?.llms_txt)
+        navigator.clipboard.writeText(selectedJobData.llms_txt).then(() => alert('Copied!'));
+    }
+
+    function downloadLlmsTxt() {
+      if (!selectedJobData?.llms_txt) return;
+      const hostname = new URL(selectedJobData.url).hostname;
+      const blob = new Blob([selectedJobData.llms_txt], {type: 'text/plain'});
+      const a = document.createElement('a');
+      a.href = URL.createObjectURL(blob);
+      a.download = `${hostname}-llms.txt`;
+      a.click();
+    }
+
+    // --------------- Auto-refresh ---------------
+    function toggleAutoRefresh() {
+      const on = document.getElementById('auto-refresh').checked;
+      clearInterval(autoRefreshTimer);
+      if (on) autoRefreshTimer = setInterval(loadAll, 3000);
+    }
+
+    // --------------- Helpers ---------------
+    function formatDuration(s) {
+      if (s < 60) return s.toFixed(1) + 's';
+      return Math.floor(s / 60) + 'm ' + Math.round(s % 60) + 's';
+    }
+    function escHtml(s) {
+      return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+    }
+
+    // Init
+    loadAll();
+    autoRefreshTimer = setInterval(loadAll, 3000);
+  </script>
+</body>
+</html>
