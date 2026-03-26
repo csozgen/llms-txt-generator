@@ -13,7 +13,8 @@ The [`llms.txt`](https://llmstxt.org/) file is a proposed standard designed to h
 - **llms.txt generation** — Groups pages by URL path prefix into sections, moves pages without meta descriptions to `## Optional`.
 - **Job-based API** — Submit a crawl, get a `job_id`, poll for progress. Supports job cancellation.
 - **Deduplication & caching** — Concurrent requests for the same URL reuse the same job. Completed results are cached for 1 hour (configurable).
-- **Batch mode** — Submit multiple URLs at once; download results as a ZIP.
+- **Batch mode** — Submit multiple URLs at once; crawled concurrently with incremental progress updates; download results as a ZIP.
+- **Per-domain rate limiting** — Configurable semaphore caps concurrent requests to the same domain across all active jobs.
 - **Metrics endpoint** — Live stats on job counts, pages crawled/skipped, recent job history.
 
 ## Getting Started
@@ -56,6 +57,7 @@ crawler:
   default_max_pages: 50
   default_max_depth: 3
   max_pages_limit: 200      # hard ceiling for user-supplied max_pages
+  max_concurrent_per_domain: 2  # max parallel requests to the same domain
 
 retry:
   max_retries: 2
@@ -71,10 +73,11 @@ cache:
 | Method | Path | Description |
 |--------|------|-------------|
 | `GET` | `/api/health` | Health check |
-| `POST` | `/api/generate` | Submit a single-URL crawl job |
+| `POST` | `/api/jobs` | Submit a single-URL crawl job |
+| `GET` | `/api/jobs` | List all top-level jobs |
 | `GET` | `/api/jobs/{job_id}` | Poll job status and result |
 | `DELETE` | `/api/jobs/{job_id}` | Cancel an in-progress job |
-| `POST` | `/api/generate/batch` | Submit a batch crawl job |
+| `POST` | `/api/jobs/batch` | Submit a batch crawl job |
 | `GET` | `/api/jobs/{job_id}/results` | Get batch job results |
 | `GET` | `/api/metrics` | Aggregate stats |
 
@@ -82,7 +85,7 @@ cache:
 
 ```bash
 # Submit
-curl -X POST http://localhost:8000/api/generate \
+curl -X POST http://localhost:8000/api/jobs \
   -H 'Content-Type: application/json' \
   -d '{"url": "https://example.com", "max_pages": 50}'
 # → {"job_id": "abc123", "status": "pending"}
