@@ -237,7 +237,8 @@ async def create_batch_job(
 
 @app.get("/api/metrics")
 async def metrics() -> MetricsResponse:
-    all_jobs = list(_jobs.values())
+    # Exclude batch parent jobs — they're wrappers; their counts come from sub-jobs
+    all_jobs = [j for j in _jobs.values() if not j.batch_urls]
     active = sum(1 for j in all_jobs if j.status in ("pending", "running"))
     completed = sum(1 for j in all_jobs if j.status == "done")
     failed = sum(1 for j in all_jobs if j.status == "error")
@@ -287,15 +288,17 @@ async def _run_batch_crawl(batch_job: JobStatus) -> None:
     for url in urls:
         norm_url = normalize_url(url)
         cached = _get_cached_job(norm_url)
-        if cached and cached.status == "done":
-            results.append({
-                "url": url,
-                "job_id": cached.job_id,
-                "status": "done",
-                "llms_txt": cached.llms_txt,
-                "page_count": cached.page_count,
-                "error": None,
-            })
+        if cached:
+            if cached.status == "done":
+                results.append({
+                    "url": url,
+                    "job_id": cached.job_id,
+                    "status": "done",
+                    "llms_txt": cached.llms_txt,
+                    "page_count": cached.page_count,
+                    "error": None,
+                })
+            # If already pending/running, skip — don't spawn a duplicate job
             continue
 
         sub_job_id = _make_job_id()
@@ -343,10 +346,24 @@ async def get_batch_results(job_id: str) -> dict:
         raise HTTPException(status_code=404, detail="Job not found.")
     if not job.batch_urls:
         raise HTTPException(status_code=400, detail="Not a batch job.")
+    completed_job_ids = {r["job_id"] for r in job.batch_results}
+    in_progress = [
+        {
+            "url": str(j.url),
+            "job_id": j.job_id,
+            "status": j.status,
+            "llms_txt": None,
+            "page_count": j.pages_crawled,
+            "error": j.error,
+        }
+        for j in _jobs.values()
+        if j.parent_batch_id == job_id and j.job_id not in completed_job_ids
+    ]
+    all_results = job.batch_results + in_progress
     return {
         "job_id": job_id,
         "status": job.status,
-        "results": job.batch_results,
+        "results": all_results,
         "url_count": len(job.batch_urls),
         "completed_count": len(job.batch_results),
     }
