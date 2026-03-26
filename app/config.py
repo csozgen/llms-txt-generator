@@ -1,3 +1,4 @@
+import os
 from dataclasses import dataclass
 from pathlib import Path
 
@@ -46,8 +47,11 @@ class Settings:
 def _load() -> Settings:
     with open(_CONFIG_PATH) as f:
         data = yaml.safe_load(f)
+    server_data = data["server"]
+    if port_env := os.environ.get("PORT"):
+        server_data["port"] = int(port_env)
     return Settings(
-        server=ServerSettings(**data["server"]),
+        server=ServerSettings(**server_data),
         crawler=CrawlerSettings(**data["crawler"]),
         retry=RetrySettings(**data["retry"]),
         cache=CacheSettings(**data["cache"]),
