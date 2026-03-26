@@ -193,6 +193,7 @@
         <pre id="result-pre"></pre>
         <div class="actions">
           <button class="btn btn-secondary" onclick="copyResult()">Copy</button>
+          <button class="btn btn-secondary" onclick="openResult()">Open</button>
           <button class="btn btn-secondary" onclick="downloadResult()">Download llms.txt</button>
         </div>
         <div class="skipped-list" id="skipped-list" style="display:none">
@@ -387,6 +388,11 @@
       navigator.clipboard.writeText(resultContent).then(() => alert('Copied!'));
     }
 
+    function openResult() {
+      const blob = new Blob([resultContent], {type: 'text/plain'});
+      window.open(URL.createObjectURL(blob), '_blank');
+    }
+
     function downloadResult() {
       const blob = new Blob([resultContent], {type: 'text/plain'});
       const a = document.createElement('a');
@@ -492,6 +498,7 @@
         const body = r.status === 'done'
           ? `<div class="batch-item-body"><pre style="max-height:200px">${escHtml(r.llms_txt || '')}</pre>
              <div class="actions" style="margin-top:0.5rem">
+               <button class="btn btn-secondary" onclick="openSingle(\`${escJs(r.llms_txt || '')}\`)">Open</button>
                <button class="btn btn-secondary" onclick="downloadSingle('${escAttr(r.url)}', \`${escJs(r.llms_txt || '')}\`)">Download</button>
              </div></div>`
           : r.error
@@ -506,6 +513,11 @@
           ${body}
         </details>`;
       }).join('');
+    }
+
+    function openSingle(content) {
+      const blob = new Blob([content], {type: 'text/plain'});
+      window.open(URL.createObjectURL(blob), '_blank');
     }
 
     function downloadSingle(url, content) {

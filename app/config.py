@@ -22,6 +22,7 @@ class CrawlerSettings:
     default_max_pages: int
     default_max_depth: int
     max_pages_limit: int
+    max_concurrent_per_domain: int
 
 
 @dataclass

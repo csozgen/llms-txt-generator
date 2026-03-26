@@ -22,12 +22,22 @@ _USER_AGENT = "profound-llm/1.0"
 # Global semaphore — shared across all concurrent crawl jobs
 _connection_semaphore: asyncio.Semaphore | None = None
 
+# Per-domain semaphores — limit concurrent requests to the same domain
+_domain_semaphores: dict[str, asyncio.Semaphore] = {}
+
 
 def _get_semaphore() -> asyncio.Semaphore:
     global _connection_semaphore
     if _connection_semaphore is None:
         _connection_semaphore = asyncio.Semaphore(settings.crawler.max_connections)
     return _connection_semaphore
+
+
+def _get_domain_semaphore(url: str) -> asyncio.Semaphore:
+    domain = urlparse(url).netloc
+    if domain not in _domain_semaphores:
+        _domain_semaphores[domain] = asyncio.Semaphore(settings.crawler.max_concurrent_per_domain)
+    return _domain_semaphores[domain]
 
 
 async def crawl(job: JobStatus) -> None:
@@ -166,8 +176,10 @@ async def _worker(
                     job.pages_skipped += 1
                 continue
 
-            # Fetch the page with retry
-            html, error = await _fetch_with_retry(client, url)
+            # Fetch the page with retry — rate-limited per domain
+            async with _get_domain_semaphore(url):
+                html, error = await _fetch_with_retry(client, url)
+                await asyncio.sleep(settings.crawler.crawl_delay)
             if error:
                 async with results_lock:
                     job.skipped_urls.append(SkippedUrl(url=url, reason=error))
@@ -207,9 +219,6 @@ async def _worker(
                     )
                 else:
                     job.progress_pct = None  # indeterminate for BFS
-
-            # Polite delay
-            await asyncio.sleep(settings.crawler.crawl_delay)
 
         finally:
             queue.task_done()

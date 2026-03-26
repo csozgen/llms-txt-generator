@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import asyncio
 import uuid
 from datetime import datetime, timezone
 from pathlib import Path
@@ -281,11 +282,9 @@ async def _run_batch_crawl(batch_job: JobStatus) -> None:
     urls = batch_job.batch_urls
     results = batch_job.batch_results
 
+    # Build sub-jobs, reusing cache where possible
+    sub_jobs: list[JobStatus] = []
     for url in urls:
-        if batch_job.cancelled:
-            batch_job.status = "cancelled"
-            break
-
         norm_url = normalize_url(url)
         cached = _get_cached_job(norm_url)
         if cached and cached.status == "done":
@@ -299,7 +298,6 @@ async def _run_batch_crawl(batch_job: JobStatus) -> None:
             })
             continue
 
-        # Create a sub-job for this URL
         sub_job_id = _make_job_id()
         sub_job = JobStatus(
             job_id=sub_job_id, status="pending", url=url,
@@ -308,20 +306,26 @@ async def _run_batch_crawl(batch_job: JobStatus) -> None:
         )
         _jobs[sub_job_id] = sub_job
         _url_to_job[norm_url] = sub_job_id
+        sub_jobs.append(sub_job)
 
+    # Crawl all sub-jobs concurrently, appending results as each one finishes
+    async def _crawl_and_collect(sub_job: JobStatus) -> None:
         await _run_crawl(sub_job)
-
         results.append({
-            "url": url,
-            "job_id": sub_job_id,
+            "url": sub_job.url,
+            "job_id": sub_job.job_id,
             "status": sub_job.status,
             "llms_txt": sub_job.llms_txt,
             "page_count": sub_job.page_count,
             "error": sub_job.error,
         })
-
         batch_job.pages_crawled += sub_job.pages_crawled
         batch_job.pages_skipped += sub_job.pages_skipped
+
+    await asyncio.gather(*[_crawl_and_collect(sub_job) for sub_job in sub_jobs])
+
+    if batch_job.cancelled:
+        batch_job.status = "cancelled"
 
     if batch_job.status == "running":
         batch_job.status = "done"
